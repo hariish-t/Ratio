@@ -99,5 +99,5 @@ void free_token(Token *token);
 
 // Function to get token type name (for debugging)
 const char *token_type_name(TokenType type);
-
+// Already have the definitions, just making sure these are declared
 #endif
