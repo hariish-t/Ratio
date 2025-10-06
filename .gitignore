@@ -1,1 +1,21 @@
 
+# Compiled files
+*.o
+*.out
+*.exe
+ratio
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build directories
+build/
+bin/
