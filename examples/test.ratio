@@ -1,0 +1,16 @@
+// Test various features
+start .main
+    set a,10
+    set b,20
+    add a,b eq c
+    echo "a + b =" c
+    
+    for i (1...5)
+        echo "Loop" i
+    endl
+    
+    if a lt b
+        echo "a is less than b"
+    else
+        echo "a is greater"
+    endb
