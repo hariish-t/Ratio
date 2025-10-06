@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "lexer.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -339,7 +341,7 @@ Token *get_next_token(Lexer *lexer) {
         if (lexer->current_char == ' ' || 
             lexer->current_char == '\t' || 
             lexer->current_char == '\r') {
-            skip_whitespace();
+            skip_whitespace(lexer);
             continue;
         }
         
