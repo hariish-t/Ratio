@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lexer.h"
+#include "parser.h"
 #include "token.h"
+#include "ast.h"
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
@@ -17,12 +19,10 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Get file size
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
 
-    // Read entire file
     char *source = malloc(file_size + 1);
     fread(source, 1, file_size, file);
     source[file_size] = '\0';
@@ -34,26 +34,23 @@ int main(int argc, char *argv[]) {
     // Tokenize
     int token_count = 0;
     Token **tokens = tokenize(source, &token_count);
+    printf("Tokenized: %d tokens\n\n", token_count);
 
-    // Print tokens (for debugging)
-    printf("=== TOKENS ===\n");
-    for (int i = 0; i < token_count; i++) {
-        printf("[%d:%d] %s", 
-               tokens[i]->line, 
-               tokens[i]->column,
-               token_type_name(tokens[i]->type));
-        
-        if (tokens[i]->value && strlen(tokens[i]->value) > 0) {
-            printf(" '%s'", tokens[i]->value);
-        }
-        printf("\n");
-    }
+    // Parse
+    printf("=== PARSING ===\n");
+    ASTNode *ast = parse(tokens, token_count);
+    printf("Parse complete!\n\n");
+
+    // Print AST (for debugging)
+    printf("=== AST ===\n");
+    print_ast(ast, 0);
 
     // Cleanup
     for (int i = 0; i < token_count; i++) {
         free_token(tokens[i]);
     }
     free(tokens);
+    free_ast_node(ast);
     free(source);
 
     printf("\n=== DONE ===\n");
