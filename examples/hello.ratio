@@ -1,4 +1,6 @@
 start .main
+    set name,"World"
+    echo "Hello" name
     set x,10
     set y,20
     add x,y eq result
