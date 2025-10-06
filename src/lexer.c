@@ -171,3 +171,287 @@ const char *token_type_name(TokenType type) {
         default: return "UNKNOWN";
     }
 }
+
+// Advance to next character
+static void advance(Lexer *lexer) {
+    if (lexer->current_char == '\n') {
+        lexer->line++;
+        lexer->column = 0;
+    }
+    
+    lexer->position++;
+    lexer->column++;
+    
+    if (lexer->position < strlen(lexer->source)) {
+        lexer->current_char = lexer->source[lexer->position];
+    } else {
+        lexer->current_char = '\0';
+    }
+}
+
+// Peek at next character without advancing
+static char peek(Lexer *lexer) {
+    int peek_pos = lexer->position + 1;
+    if (peek_pos < strlen(lexer->source)) {
+        return lexer->source[peek_pos];
+    }
+    return '\0';
+}
+
+// Skip whitespace (but not newlines)
+static void skip_whitespace(Lexer *lexer) {
+    while (lexer->current_char == ' ' || 
+           lexer->current_char == '\t' || 
+           lexer->current_char == '\r') {
+        advance(lexer);
+    }
+}
+
+// Skip single-line comment
+static void skip_line_comment(Lexer *lexer) {
+    while (lexer->current_char != '\n' && lexer->current_char != '\0') {
+        advance(lexer);
+    }
+}
+
+// Skip multi-line comment
+static void skip_block_comment(Lexer *lexer) {
+    advance(lexer); // skip '/'
+    advance(lexer); // skip '*'
+    
+    while (lexer->current_char != '\0') {
+        if (lexer->current_char == '*' && peek(lexer) == '/') {
+            advance(lexer); // skip '*'
+            advance(lexer); // skip '/'
+            break;
+        }
+        advance(lexer);
+    }
+}
+
+// Read a number (int or float)
+static Token *read_number(Lexer *lexer) {
+    int start_col = lexer->column;
+    char buffer[256];
+    int i = 0;
+    int is_float = 0;
+    
+    while (isdigit(lexer->current_char) || lexer->current_char == '.') {
+        if (lexer->current_char == '.') {
+            if (is_float) break; // Second dot, stop
+            // Check if it's ... (ellipsis)
+            if (peek(lexer) == '.') break;
+            is_float = 1;
+        }
+        buffer[i++] = lexer->current_char;
+        advance(lexer);
+    }
+    buffer[i] = '\0';
+    
+    return create_token(is_float ? TOKEN_FLOAT : TOKEN_INT, buffer, lexer->line, start_col);
+}
+
+// Read a string (with quotes)
+static Token *read_string(Lexer *lexer) {
+    int start_col = lexer->column;
+    char buffer[1024];
+    int i = 0;
+    
+    advance(lexer); // skip opening quote
+    
+    while (lexer->current_char != '"' && lexer->current_char != '\0') {
+        if (lexer->current_char == '\\' && peek(lexer) == '"') {
+            advance(lexer); // skip backslash
+            buffer[i++] = '"';
+            advance(lexer);
+        } else {
+            buffer[i++] = lexer->current_char;
+            advance(lexer);
+        }
+    }
+    
+    if (lexer->current_char == '"') {
+        advance(lexer); // skip closing quote
+    }
+    
+    buffer[i] = '\0';
+    return create_token(TOKEN_STRING, buffer, lexer->line, start_col);
+}
+
+// Read an identifier or keyword
+static Token *read_identifier(Lexer *lexer) {
+    int start_col = lexer->column;
+    char buffer[256];
+    int i = 0;
+    
+    while (is_identifier_char(lexer->current_char)) {
+        buffer[i++] = lexer->current_char;
+        advance(lexer);
+    }
+    buffer[i] = '\0';
+    
+    TokenType type = check_keyword(buffer);
+    return create_token(type, buffer, lexer->line, start_col);
+}
+
+// Read a label (.labelname or .function)
+static Token *read_label(Lexer *lexer) {
+    int start_col = lexer->column;
+    char buffer[256];
+    int i = 0;
+    
+    buffer[i++] = lexer->current_char; // include the dot
+    advance(lexer);
+    
+    while (is_identifier_char(lexer->current_char)) {
+        buffer[i++] = lexer->current_char;
+        advance(lexer);
+    }
+    buffer[i] = '\0';
+    
+    return create_token(TOKEN_LABEL, buffer, lexer->line, start_col);
+}
+
+// Create lexer
+Lexer *create_lexer(const char *source) {
+    Lexer *lexer = malloc(sizeof(Lexer));
+    lexer->source = source;
+    lexer->position = 0;
+    lexer->line = 1;
+    lexer->column = 0;
+    lexer->current_char = source[0];
+    return lexer;
+}
+
+// Free lexer
+void free_lexer(Lexer *lexer) {
+    if (lexer) {
+        free(lexer);
+    }
+}
+
+// Get next token
+Token *get_next_token(Lexer *lexer) {
+    while (lexer->current_char != '\0') {
+        int start_col = lexer->column;
+        
+        // Skip whitespace
+        if (lexer->current_char == ' ' || 
+            lexer->current_char == '\t' || 
+            lexer->current_char == '\r') {
+            skip_whitespace();
+            continue;
+        }
+        
+        // Newline
+        if (lexer->current_char == '\n') {
+            advance(lexer);
+            return create_token(TOKEN_NEWLINE, "\\n", lexer->line - 1, start_col);
+        }
+        
+        // Comments
+        if (lexer->current_char == '/' && peek(lexer) == '/') {
+            skip_line_comment(lexer);
+            continue;
+        }
+        
+        if (lexer->current_char == '/' && peek(lexer) == '*') {
+            skip_block_comment(lexer);
+            continue;
+        }
+        
+        // Numbers
+        if (isdigit(lexer->current_char)) {
+            return read_number(lexer);
+        }
+        
+        // Strings
+        if (lexer->current_char == '"') {
+            return read_string(lexer);
+        }
+        
+        // Labels (.name)
+        if (lexer->current_char == '.' && isalpha(peek(lexer))) {
+            return read_label(lexer);
+        }
+        
+        // Ellipsis (...)
+        if (lexer->current_char == '.' && peek(lexer) == '.') {
+            advance(lexer);
+            advance(lexer);
+            advance(lexer);
+            return create_token(TOKEN_ELLIPSIS, "...", lexer->line, start_col);
+        }
+        
+        // Single character tokens
+        switch (lexer->current_char) {
+            case ',':
+                advance(lexer);
+                return create_token(TOKEN_COMMA, ",", lexer->line, start_col);
+            case '.':
+                advance(lexer);
+                return create_token(TOKEN_DOT, ".", lexer->line, start_col);
+            case '(':
+                advance(lexer);
+                return create_token(TOKEN_LPAREN, "(", lexer->line, start_col);
+            case ')':
+                advance(lexer);
+                return create_token(TOKEN_RPAREN, ")", lexer->line, start_col);
+            case '{':
+                advance(lexer);
+                return create_token(TOKEN_LBRACE, "{", lexer->line, start_col);
+            case '}':
+                advance(lexer);
+                return create_token(TOKEN_RBRACE, "}", lexer->line, start_col);
+            case '[':
+                advance(lexer);
+                return create_token(TOKEN_LBRACKET, "[", lexer->line, start_col);
+            case ']':
+                advance(lexer);
+                return create_token(TOKEN_RBRACKET, "]", lexer->line, start_col);
+            case ':':
+                advance(lexer);
+                return create_token(TOKEN_COLON, ":", lexer->line, start_col);
+            case '_':
+                // Check if it's a loop label (_loopname) or just underscore
+                if (isalpha(peek(lexer))) {
+                    return read_identifier(lexer); // Will be an identifier starting with _
+                }
+                advance(lexer);
+                return create_token(TOKEN_UNDERSCORE, "_", lexer->line, start_col);
+            case '$':
+                advance(lexer);
+                return create_token(TOKEN_DOLLAR, "$", lexer->line, start_col);
+        }
+        
+        // Identifiers and keywords
+        if (isalpha(lexer->current_char) || lexer->current_char == '_') {
+            return read_identifier(lexer);
+        }
+        
+        // Unknown character
+        char unknown[2] = {lexer->current_char, '\0'};
+        advance(lexer);
+        return create_token(TOKEN_ERROR, unknown, lexer->line, start_col);
+    }
+    
+    return create_token(TOKEN_EOF, "", lexer->line, lexer->column);
+}
+
+// Tokenize entire source
+Token **tokenize(const char *source, int *token_count) {
+    Lexer *lexer = create_lexer(source);
+    Token **tokens = malloc(sizeof(Token*) * 10000); // Initial capacity
+    int count = 0;
+    
+    Token *token;
+    while ((token = get_next_token(lexer))->type != TOKEN_EOF) {
+        tokens[count++] = token;
+    }
+    tokens[count++] = token; // Include EOF token
+    
+    *token_count = count;
+    free_lexer(lexer);
+    
+    return tokens;
+}
