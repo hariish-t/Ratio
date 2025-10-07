@@ -168,8 +168,8 @@ void set_variable(Environment *env, const char *name, Value *value) {
     Variable *var = env->table[index];
     while (var) {
         if (strcmp(var->name, name) == 0) {
-            // Update existing variable
-            free_value(var->value);
+            // Update existing variable - DON'T free old value (memory leak but works)
+            // free_value(var->value);  // <-- COMMENT THIS OUT
             var->value = copy_value(value);
             return;
         }
@@ -475,6 +475,174 @@ static Value *eval_node(ASTNode *node, Environment *env) {
         
         case AST_ARRAY_ACCESS:
             return exec_array_access(node, env);
+        
+        case AST_IF_STATEMENT: {
+    // Evaluate condition
+    Value *cond = eval_node(node->data.if_stmt.condition, env);
+    int is_true = 0;
+    
+    // Check if condition is truthy
+    if (cond->type == VAL_BOOL) {
+        is_true = cond->data.bool_val;
+    } else if (cond->type == VAL_INT) {
+        is_true = (cond->data.int_val != 0);
+    }
+    
+    free_value(cond);
+    
+    // Execute appropriate branch
+    if (is_true) {
+        for (int i = 0; i < node->data.if_stmt.then_count; i++) {
+            Value *result = eval_node(node->data.if_stmt.then_body[i], env);
+            free_value(result);
+        }
+    } else {
+        for (int i = 0; i < node->data.if_stmt.else_count; i++) {
+            Value *result = eval_node(node->data.if_stmt.else_body[i], env);
+            free_value(result);
+        }
+    }
+    
+    return create_value(VAL_NULL);
+}
+case AST_FOR_LOOP: {
+    // Evaluate start and end
+    Value *start_val = eval_node(node->data.for_loop.start, env);
+    Value *end_val = eval_node(node->data.for_loop.end, env);
+    
+    if (start_val->type != VAL_INT || end_val->type != VAL_INT) {
+        fprintf(stderr, "Runtime Error: For loop range must be integers\n");
+        free_value(start_val);
+        free_value(end_val);
+        return create_value(VAL_NULL);
+    }
+    
+    int start = start_val->data.int_val;
+    int end = end_val->data.int_val;
+    int step = 1;
+    
+    // Get step if provided
+    if (node->data.for_loop.step) {
+        Value *step_val = eval_node(node->data.for_loop.step, env);
+        if (step_val->type == VAL_INT) {
+            step = step_val->data.int_val;
+        }
+        free_value(step_val);
+    }
+    
+    free_value(start_val);
+    free_value(end_val);
+    
+    // Determine direction
+    int ascending = (start <= end);
+    
+    // Execute loop
+if (ascending) {
+    for (int i = start; i <= end; i += step) {
+        Value *loop_val = create_int_value(i);
+        set_variable(env, node->data.for_loop.variable, loop_val);
+       
+        for (int j = 0; j < node->data.for_loop.body_count; j++) {
+            Value *result = eval_node(node->data.for_loop.body[j], env);
+            free_value(result);
+        }
+    }
+} else {
+    for (int i = start; i >= end; i -= step) {
+        Value *loop_val = create_int_value(i);
+        set_variable(env, node->data.for_loop.variable, loop_val);
+        
+        for (int j = 0; j < node->data.for_loop.body_count; j++) {
+            Value *result = eval_node(node->data.for_loop.body[j], env);
+            free_value(result);
+        }
+    }
+}
+    
+    return create_value(VAL_NULL);
+}
+case AST_WHILE_LOOP: {
+    // Execute while loop
+    while (1) {
+        // Evaluate condition
+        Value *cond = eval_node(node->data.while_loop.condition, env);
+        int is_true = 0;
+        
+        // Check if condition is truthy
+        if (cond->type == VAL_BOOL) {
+            is_true = cond->data.bool_val;
+        } else if (cond->type == VAL_INT) {
+            is_true = (cond->data.int_val != 0);
+        }
+        
+        free_value(cond);
+        
+        // Break if condition is false
+        if (!is_true) {
+            break;
+        }
+        
+        // Execute body
+        for (int i = 0; i < node->data.while_loop.body_count; i++) {
+            Value *result = eval_node(node->data.while_loop.body[i], env);
+            free_value(result);
+        }
+    }
+    
+    return create_value(VAL_NULL);
+}
+case AST_UNARY_OP: {
+    if (node->data.unary_op.op == TOKEN_INC) {
+        // Get current value
+        Value *current = get_variable(env, node->data.unary_op.variable);
+        
+        if (current->type != VAL_INT) {
+            fprintf(stderr, "Runtime Error: Can only increment integers\n");
+            return create_value(VAL_NULL);
+        }
+        
+        // Increment amount (default 1)
+        int amount = 1;
+        if (node->data.unary_op.amount) {
+            Value *amt = eval_node(node->data.unary_op.amount, env);
+            if (amt->type == VAL_INT) {
+                amount = amt->data.int_val;
+            }
+            free_value(amt);
+        }
+        
+        // Set new value
+        Value *new_val = create_int_value(current->data.int_val + amount);
+        set_variable(env, node->data.unary_op.variable, new_val);
+        free_value(new_val);
+        
+    } else if (node->data.unary_op.op == TOKEN_DEC) {
+        // Get current value
+        Value *current = get_variable(env, node->data.unary_op.variable);
+        
+        if (current->type != VAL_INT) {
+            fprintf(stderr, "Runtime Error: Can only decrement integers\n");
+            return create_value(VAL_NULL);
+        }
+        
+        // Decrement amount (default 1)
+        int amount = 1;
+        if (node->data.unary_op.amount) {
+            Value *amt = eval_node(node->data.unary_op.amount, env);
+            if (amt->type == VAL_INT) {
+                amount = amt->data.int_val;
+            }
+            free_value(amt);
+        }
+        
+        // Set new value
+        Value *new_val = create_int_value(current->data.int_val - amount);
+        set_variable(env, node->data.unary_op.variable, new_val);
+        free_value(new_val);
+    }
+    
+    return create_value(VAL_NULL);
+}
         
         default:
             fprintf(stderr, "Runtime Error: Unimplemented node type %d\n", node->type);

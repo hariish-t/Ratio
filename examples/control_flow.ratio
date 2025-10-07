@@ -1,0 +1,16 @@
+start .main
+    set x,5
+    set y,10
+    
+    if x lt y
+        echo "x is less than y"
+    else
+        echo "x is greater"
+    endb
+    
+    echo "Counting 1 to 5:"
+    for i (1...5)
+        echo i
+    endl
+    
+    echo "Done!"

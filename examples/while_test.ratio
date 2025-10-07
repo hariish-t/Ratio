@@ -1,0 +1,10 @@
+start .main
+    set counter,0
+    
+    echo "Counting with while:"
+    while counter lt 5
+        echo counter
+        inc counter
+    endl
+    
+    echo "Done!"

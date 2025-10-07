@@ -372,6 +372,11 @@ static ASTNode *parse_if(Parser *parser) {
         consume(parser, TOKEN_RPAREN, "Expected ')' after condition");
     }
     
+    // Skip newlines after condition
+    while (match(parser, TOKEN_NEWLINE)) {
+        advance_parser(parser);
+    }
+    
     // Parse then body
     ASTNode **then_body = malloc(sizeof(ASTNode*) * 100);
     int then_count = 0;
@@ -379,6 +384,11 @@ static ASTNode *parse_if(Parser *parser) {
     while (!match(parser, TOKEN_ELSEIF) && !match(parser, TOKEN_ELSE) && 
            !match(parser, TOKEN_ENDB) && !match(parser, TOKEN_EOF)) {
         then_body[then_count++] = parse_statement(parser);
+        
+        // Skip newlines after each statement
+        while (match(parser, TOKEN_NEWLINE)) {
+            advance_parser(parser);
+        }
     }
     
     // Parse else/elseif
@@ -390,8 +400,19 @@ static ASTNode *parse_if(Parser *parser) {
         else_body[else_count++] = parse_if(parser);
     } else if (match(parser, TOKEN_ELSE)) {
         advance_parser(parser);
+        
+        // Skip newlines after else
+        while (match(parser, TOKEN_NEWLINE)) {
+            advance_parser(parser);
+        }
+        
         while (!match(parser, TOKEN_ENDB) && !match(parser, TOKEN_EOF)) {
             else_body[else_count++] = parse_statement(parser);
+            
+            // Skip newlines after each statement
+            while (match(parser, TOKEN_NEWLINE)) {
+                advance_parser(parser);
+            }
         }
     }
     
@@ -435,12 +456,22 @@ static ASTNode *parse_for(Parser *parser) {
         label = strdup(label_token->value);
     }
     
+    // Skip newlines after for declaration
+    while (match(parser, TOKEN_NEWLINE)) {
+        advance_parser(parser);
+    }
+    
     // Parse body
     ASTNode **body = malloc(sizeof(ASTNode*) * 100);
     int body_count = 0;
     
     while (!match(parser, TOKEN_ENDL) && !match(parser, TOKEN_EOF)) {
         body[body_count++] = parse_statement(parser);
+        
+        // Skip newlines after each statement
+        while (match(parser, TOKEN_NEWLINE)) {
+            advance_parser(parser);
+        }
     }
     
     consume(parser, TOKEN_ENDL, "Expected 'endl' to close for loop");
@@ -455,7 +486,6 @@ static ASTNode *parse_for(Parser *parser) {
     node->data.for_loop.label = label;
     return node;
 }
-
 // Parse while loop
 static ASTNode *parse_while(Parser *parser) {
     Token *token = current_token(parser);

@@ -1,0 +1,5 @@
+start .main
+    for i (1...3)
+        echo "i is:"
+        echo i
+    endl
