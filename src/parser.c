@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "parser.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,11 +41,6 @@ Token *peek_token(Parser *parser, int offset) {
 // Move to next token
 void advance_parser(Parser *parser) {
     if (parser->current < parser->token_count - 1) {
-        parser->current++;
-    }
-    // Skip newlines (they're just for readability)
-    while (current_token(parser)->type == TOKEN_NEWLINE && 
-           parser->current < parser->token_count - 1) {
         parser->current++;
     }
 }
@@ -743,13 +740,17 @@ static ASTNode *parse_label_def(Parser *parser) {
 
 // Parse a single statement
 static ASTNode *parse_statement(Parser *parser) {
-    Token *token = current_token(parser);
-    
-    // Skip newlines
-    if (match(parser, TOKEN_NEWLINE)) {
+    // Skip ALL newlines at start
+    while (match(parser, TOKEN_NEWLINE)) {
         advance_parser(parser);
-        return parse_statement(parser);
     }
+    
+    // Check for EOF
+    if (match(parser, TOKEN_EOF)) {
+        return NULL;
+    }
+    
+    Token *token = current_token(parser);
     
     // Assignment
     if (match(parser, TOKEN_SET)) {
@@ -858,12 +859,14 @@ ASTNode *parse(Token **tokens, int token_count) {
                 fprintf(stderr, "Parse Error: Expected '.main' after 'start'\n");
                 exit(1);
             }
-            
-            // Parse main body (until EOF or next function)
-            while (!match(parser, TOKEN_EOF) && 
-                   !(match(parser, TOKEN_LABEL) && peek_token(parser, 1)->type == TOKEN_LPAREN)) {
-                statements[statement_count++] = parse_statement(parser);
+// Parse main body (until EOF or next function)
+        while (!match(parser, TOKEN_EOF) && 
+            !(match(parser, TOKEN_LABEL) && peek_token(parser, 1)->type == TOKEN_LPAREN)) {
+            ASTNode *stmt = parse_statement(parser);
+            if (stmt != NULL) {
+                 statements[statement_count++] = stmt;
             }
+        }
         }
         else {
             advance_parser(parser);
@@ -889,7 +892,11 @@ void free_ast_node(ASTNode *node) {
 
 // Print AST (for debugging)
 void print_ast(ASTNode *node, int indent) {
-    if (!node) return;
+    if (!node) {
+        for (int i = 0; i < indent; i++) printf("  ");
+        printf("(NULL NODE)\n");
+        return;
+    }
     
     for (int i = 0; i < indent; i++) printf("  ");
     
@@ -897,19 +904,34 @@ void print_ast(ASTNode *node, int indent) {
         case AST_PROGRAM:
             printf("PROGRAM (%d statements)\n", node->data.program.statement_count);
             for (int i = 0; i < node->data.program.statement_count; i++) {
-                print_ast(node->data.program.statements[i], indent + 1);
+                printf("  Statement %d:\n", i);
+                if (node->data.program.statements[i] == NULL) {
+                    printf("    (NULL)\n");
+                } else {
+                    print_ast(node->data.program.statements[i], indent + 1);
+                }
             }
             break;
             
         case AST_ASSIGNMENT:
-            printf("ASSIGNMENT: %s = \n", node->data.assignment.variable);
-            print_ast(node->data.assignment.value, indent + 1);
+            printf("ASSIGNMENT: %s = ", node->data.assignment.variable ? node->data.assignment.variable : "(null var)");
+            if (node->data.assignment.value) {
+                printf("\n");
+                print_ast(node->data.assignment.value, indent + 1);
+            } else {
+                printf("(null value)\n");
+            }
             break;
             
         case AST_ECHO:
             printf("ECHO (%d expressions)\n", node->data.echo.expr_count);
             for (int i = 0; i < node->data.echo.expr_count; i++) {
-                print_ast(node->data.echo.expressions[i], indent + 1);
+                if (node->data.echo.expressions[i]) {
+                    print_ast(node->data.echo.expressions[i], indent + 1);
+                } else {
+                    for (int j = 0; j < indent + 1; j++) printf("  ");
+                    printf("(NULL expression)\n");
+                }
             }
             break;
             
@@ -917,31 +939,64 @@ void print_ast(ASTNode *node, int indent) {
             printf("INT: %d\n", node->data.int_literal.value);
             break;
             
+        case AST_LITERAL_FLOAT:
+            printf("FLOAT: %f\n", node->data.float_literal.value);
+            break;
+            
         case AST_LITERAL_STRING:
-            printf("STRING: \"%s\"\n", node->data.string_literal.value);
+            printf("STRING: \"%s\"\n", node->data.string_literal.value ? node->data.string_literal.value : "(null)");
+            break;
+            
+        case AST_LITERAL_BOOL:
+            printf("BOOL: %s\n", node->data.bool_literal.value ? "true" : "false");
             break;
             
         case AST_IDENTIFIER:
-            printf("IDENTIFIER: %s\n", node->data.identifier.name);
+            printf("IDENTIFIER: %s\n", node->data.identifier.name ? node->data.identifier.name : "(null)");
             break;
             
         case AST_BINARY_OP:
-            printf("BINARY_OP: %s\n", token_type_name(node->data.binary_op.op));
-            print_ast(node->data.binary_op.left, indent + 1);
-            print_ast(node->data.binary_op.right, indent + 1);
-            break;
-            
-        case AST_FOR_LOOP:
-            printf("FOR_LOOP: %s\n", node->data.for_loop.variable);
-            print_ast(node->data.for_loop.start, indent + 1);
-            print_ast(node->data.for_loop.end, indent + 1);
-            for (int i = 0; i < node->data.for_loop.body_count; i++) {
-                print_ast(node->data.for_loop.body[i], indent + 1);
+            printf("BINARY_OP: %s", token_type_name(node->data.binary_op.op));
+            if (node->data.binary_op.result) {
+                printf(" -> %s", node->data.binary_op.result);
+            }
+            printf("\n");
+            if (node->data.binary_op.left) {
+                print_ast(node->data.binary_op.left, indent + 1);
+            } else {
+                for (int i = 0; i < indent + 1; i++) printf("  ");
+                printf("(NULL left)\n");
+            }
+            if (node->data.binary_op.right) {
+                print_ast(node->data.binary_op.right, indent + 1);
+            } else {
+                for (int i = 0; i < indent + 1; i++) printf("  ");
+                printf("(NULL right)\n");
             }
             break;
             
+        case AST_ARRAY:
+            printf("ARRAY (%d elements)\n", node->data.array.element_count);
+            break;
+            
+        case AST_INPUT:
+            printf("INPUT\n");
+            break;
+            
+        case AST_FOR_LOOP:
+            printf("FOR_LOOP: %s\n", node->data.for_loop.variable ? node->data.for_loop.variable : "(null)");
+            break;
+            
+        case AST_IF_STATEMENT:
+            printf("IF_STATEMENT\n");
+            break;
+            
+        case AST_LABEL:
+            printf("LABEL: %s\n", node->data.label.name ? node->data.label.name : "(null)");
+            break;
+            
         default:
-            printf("NODE: %d\n", node->type);
+            printf("NODE_TYPE: %d (unknown)\n", node->type);
             break;
     }
 }

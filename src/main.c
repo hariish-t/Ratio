@@ -42,17 +42,22 @@ int main(int argc, char *argv[]) {
     printf("Parse complete!\n\n");
 
     // Print AST (for debugging)
-    printf("=== AST ===\n");
-    print_ast(ast, 0);
+printf("=== AST ===\n");
 
-    // Cleanup
-    for (int i = 0; i < token_count; i++) {
-        free_token(tokens[i]);
+// Debug: Check what's in the program before printing
+if (ast && ast->type == AST_PROGRAM) {
+    printf("Program has %d statements\n", ast->data.program.statement_count);
+    for (int i = 0; i < ast->data.program.statement_count; i++) {
+        ASTNode *stmt = ast->data.program.statements[i];
+        if (stmt == NULL) {
+            printf("  Statement %d: NULL\n", i);
+        } else {
+            printf("  Statement %d: type=%d\n", i, stmt->type);
+        }
     }
-    free(tokens);
-    free_ast_node(ast);
-    free(source);
+}
 
-    printf("\n=== DONE ===\n");
+printf("\nNow printing full AST:\n");
+print_ast(ast, 0);
     return 0;
 }
