@@ -1,0 +1,6 @@
+start .main
+    set x,10
+    set y,20
+    echo "x is" x
+    echo "y is" y
+    echo "Done!"

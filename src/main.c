@@ -3,6 +3,7 @@
 #include <string.h>
 #include "lexer.h"
 #include "parser.h"
+#include "interpreter.h"
 #include "token.h"
 #include "ast.h"
 
@@ -28,36 +29,26 @@ int main(int argc, char *argv[]) {
     source[file_size] = '\0';
     fclose(file);
 
-    printf("=== RATIO INTERPRETER v1.0 ===\n");
-    printf("Source file: %s\n\n", argv[1]);
+    printf("=== RATIO INTERPRETER v1.0 ===\n\n");
 
     // Tokenize
     int token_count = 0;
     Token **tokens = tokenize(source, &token_count);
-    printf("Tokenized: %d tokens\n\n", token_count);
 
     // Parse
-    printf("=== PARSING ===\n");
     ASTNode *ast = parse(tokens, token_count);
-    printf("Parse complete!\n\n");
 
-    // Print AST (for debugging)
-printf("=== AST ===\n");
+    // Interpret!
+    printf("=== OUTPUT ===\n");
+    interpret(ast);
 
-// Debug: Check what's in the program before printing
-if (ast && ast->type == AST_PROGRAM) {
-    printf("Program has %d statements\n", ast->data.program.statement_count);
-    for (int i = 0; i < ast->data.program.statement_count; i++) {
-        ASTNode *stmt = ast->data.program.statements[i];
-        if (stmt == NULL) {
-            printf("  Statement %d: NULL\n", i);
-        } else {
-            printf("  Statement %d: type=%d\n", i, stmt->type);
-        }
+    // Cleanup
+    for (int i = 0; i < token_count; i++) {
+        free_token(tokens[i]);
     }
-}
+    free(tokens);
+    free_ast_node(ast);
+    free(source);
 
-printf("\nNow printing full AST:\n");
-print_ast(ast, 0);
     return 0;
 }
